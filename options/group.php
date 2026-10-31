@@ -1,0 +1,186 @@
+<?php
+require_once __DIR__ . '/../includes/header.php';
+
+$page_title = 'Create Group';
+
+$db = getDB();
+
+// Handle form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+    
+    if ($action === 'add') {
+        $group_name = trim($_POST['group_name'] ?? '');
+        $group_name_bn = trim($_POST['group_name_bn'] ?? '');
+        
+        if (empty($group_name)) {
+            setFlashMessage('error', 'Group name is required');
+        } else {
+            try {
+                $stmt = $db->prepare("INSERT INTO class_groups (group_name, group_name_bn) VALUES (?, ?)");
+                $stmt->execute([$group_name, $group_name_bn]);
+                setFlashMessage('success', 'Group created successfully');
+            } catch (PDOException $e) {
+                setFlashMessage('error', 'Error creating group: ' . $e->getMessage());
+            }
+        }
+    } elseif ($action === 'edit') {
+        $id = $_POST['id'] ?? 0;
+        $group_name = trim($_POST['group_name'] ?? '');
+        $group_name_bn = trim($_POST['group_name_bn'] ?? '');
+        
+        if (empty($group_name)) {
+            setFlashMessage('error', 'Group name is required');
+        } else {
+            try {
+                $stmt = $db->prepare("UPDATE class_groups SET group_name = ?, group_name_bn = ? WHERE id = ?");
+                $stmt->execute([$group_name, $group_name_bn, $id]);
+                setFlashMessage('success', 'Group updated successfully');
+            } catch (PDOException $e) {
+                setFlashMessage('error', 'Error updating group: ' . $e->getMessage());
+            }
+        }
+    } elseif ($action === 'delete') {
+        $id = $_POST['id'] ?? 0;
+        try {
+            $stmt = $db->prepare("DELETE FROM class_groups WHERE id = ?");
+            $stmt->execute([$id]);
+            setFlashMessage('success', 'Group deleted successfully');
+        } catch (PDOException $e) {
+            setFlashMessage('error', 'Error deleting group: ' . $e->getMessage());
+        }
+    }
+    
+    redirect(SITE_URL . '/options/group.php');
+}
+
+// Get all groups
+$groups = $db->query("SELECT * FROM class_groups ORDER BY group_name")->fetchAll();
+?>
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-users me-2"></i>Create Group</h2>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
+            <i class="fas fa-plus me-1"></i>Add New Group
+        </button>
+    </div>
+    
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover datatable">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Group Name</th>
+                            <th>Group Name (BN)</th>
+                            <th>Status</th>
+                            <th>Created At</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($groups as $index => $group): ?>
+                        <tr>
+                            <td><?php echo $index + 1; ?></td>
+                            <td><?php echo htmlspecialchars($group['group_name']); ?></td>
+                            <td><?php echo htmlspecialchars($group['group_name_bn']); ?></td>
+                            <td>
+                                <span class="badge bg-<?php echo $group['status'] === 'active' ? 'success' : 'danger'; ?>">
+                                    <?php echo ucfirst($group['status']); ?>
+                                </span>
+                            </td>
+                            <td><?php echo formatDate($group['created_at']); ?></td>
+                            <td>
+                                <button class="btn btn-sm btn-info" onclick="editGroup(<?php echo htmlspecialchars(json_encode($group)); ?>)">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <form method="POST" class="d-inline" onsubmit="return confirm('Are you sure?');">
+                                    <input type="hidden" name="action" value="delete">
+                                    <input type="hidden" name="id" value="<?php echo $group['id']; ?>">
+                                    <button type="submit" class="btn btn-sm btn-danger">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Modal -->
+<div class="modal fade" id="addModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST">
+                <input type="hidden" name="action" value="add">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New Group</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Group Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="group_name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Group Name (Bangla)</label>
+                        <input type="text" class="form-control" name="group_name_bn">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Group</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST">
+                <input type="hidden" name="action" value="edit">
+                <input type="hidden" name="id" id="edit_id">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Group</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Group Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="group_name" id="edit_group_name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Group Name (Bangla)</label>
+                        <input type="text" class="form-control" name="group_name_bn" id="edit_group_name_bn">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Group</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function editGroup(data) {
+    document.getElementById('edit_id').value = data.id;
+    document.getElementById('edit_group_name').value = data.group_name;
+    document.getElementById('edit_group_name_bn').value = data.group_name_bn || '';
+    
+    var modal = new bootstrap.Modal(document.getElementById('editModal'));
+    modal.show();
+}
+</script>
+
+<?php require_once __DIR__ . '/../includes/footer.php'; ?>
